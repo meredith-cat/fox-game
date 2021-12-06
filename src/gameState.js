@@ -1,6 +1,6 @@
 //import { modFox, modScene, togglePoopBag } from "./ui";
 
-import { modFox, modScene } from "./ui";
+import { modFox, modScene, togglePoopBag } from "./ui";
 import {
   RAIN_CHANCE,
   SCENES,
@@ -8,6 +8,7 @@ import {
   NIGHT_LENGTH,
   getNextDieTime,
   getNextHungerTime,
+  getNextPoopTime,
 } from "./constants";
 
 const gameState = {
@@ -16,6 +17,11 @@ const gameState = {
   wakeTime: -1,
   hungryTime: -1,
   dieTime: -1,
+  sleepTime: -1,
+  poopTime: -1,
+  timeToStartCelebrating: -1,
+  timeToEndCelebrating: -1,
+  scene: 0,
 
   tick() {
     this.clock++;
@@ -28,6 +34,12 @@ const gameState = {
       this.getHungry();
     } else if (this.clock === this.dieTime) {
       this.die();
+    } else if (this.clock === this.timeToStartCelebrating) {
+      this.startCelebrating();
+    } else if (this.clock === this.timeToEndCelebrating) {
+      this.endCelebrating();
+    } else if (this.clock === this.poopTime) {
+      this.poop();
     }
 
     return this.clock;
@@ -45,11 +57,11 @@ const gameState = {
     console.log("awoken");
     this.current = "IDLING";
     this.wakeTime = -1;
-    modFox("idling");
     this.scene = Math.random() > RAIN_CHANCE ? 0 : 1;
     modScene(SCENES[this.scene]);
     this.sleepTime = this.clock + DAY_LENGTH;
     this.hungryTime = getNextHungerTime(this.clock);
+    this.determineFoxState();
   },
 
   sleep() {
@@ -68,6 +80,30 @@ const gameState = {
 
   die() {
     console.log("die");
+  },
+
+  startCelebrating() {
+    this.current = "CELEBRATING";
+    modFox("celebrate");
+    this.timeToStartCelebrating = -1;
+    this.timeToEndCelebrating = this.clock + 2;
+  },
+
+  endCelebrating() {
+    this.timeToEndCelebrating = -1;
+    this.current = "IDLING";
+    this.determineFoxState();
+    togglePoopBag(false);
+  },
+
+  determineFoxState() {
+    if (this.current === "IDLING") {
+      if (SCENES[this.scene] === "rain") {
+        modFox("rain");
+      } else {
+        modFox("idling");
+      }
+    }
   },
 
   handleUserAction(icon) {
@@ -96,11 +132,23 @@ const gameState = {
   },
 
   changeWeather() {
+    this.scene = (1 + this.scene) % SCENES.length;
+    modScene(SCENES[this.scene]);
+    this.determineFoxState();
     console.log("change weather");
   },
+
   cleanUpPoop() {
     console.log("cleanup poop");
+    if (!this.current === "POOPING") {
+      return;
+    }
+    this.dieTime = -1;
+    togglePoopBag(true);
+    this.startCelebrating();
+    this.hungryTime = getNextHungerTime(this.clock);
   },
+
   feed() {
     if (this.current != "HUNGRY") {
       return;
@@ -110,6 +158,13 @@ const gameState = {
     this.poopTime = getNextPoopTime(this.clock);
     modFox("eating");
     this.timeToStartCelebrating = this.clock + 2;
+  },
+
+  poop() {
+    this.current = "POOPING";
+    this.poopTime = -1;
+    this.dieTime = getNextDieTime(this.clock);
+    modFox("pooping");
   },
 };
 
